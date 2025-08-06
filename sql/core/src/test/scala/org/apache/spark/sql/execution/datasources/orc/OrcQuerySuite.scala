@@ -332,6 +332,80 @@ abstract class OrcQueryTest extends OrcTest {
     }
   }
 
+  test("dpp") {
+    // 4 rows, cells of column 1 of row 2 and row 4 are null
+    val fact = (0 to 99).map { i =>
+      (i, i + 1, (i + 2).toByte, (i + 3).toShort, (i * 20) % 100, (i + 1).toString)
+    }
+
+    val dim = (0 to 9).map { i =>
+      (i, i + 1, (i + 2).toByte, (i + 3).toShort, (i * 10), (i + 1).toString)
+    }
+
+    withOrcTable(fact, "fact", true, Seq.apply("_1", "_2", "_3")) {
+      withOrcTable(dim, "dim") {
+        val dfExplain = sql(
+          """
+            |Explain
+            |SELECT f._1, f._2, f._3, f._4 FROM fact f
+            |JOIN dim d
+            |ON (f._2 = d._2)
+            |WHERE d._5 > 80
+          """.stripMargin)
+        checkKeywordsExist(dfExplain, "dynamicpruningexpression", "dynamicpruning")
+
+        val df = sql(
+          """
+            |SELECT f._1, f._2, f._3, f._4 FROM fact f
+            |JOIN dim d
+            |ON (f._2 = d._2)
+            |WHERE d._5 > 80
+          """.stripMargin)
+        checkAnswer(df, Row(9, 10, 11, 12) :: Nil)
+
+        // reuse a single Byte key
+        val dfByte = sql(
+          """
+            |SELECT f._1, f._2, f._3, f._4 FROM fact f
+            |JOIN dim d
+            |ON (f._3 = d._3)
+            |WHERE d._5 > 80
+          """.stripMargin)
+        checkAnswer(dfByte, Row(9, 10, 11, 12) :: Nil)
+
+        // reuse a single String key
+        val dfStr = sql(
+          """
+            |SELECT f._1, f._2, f._3, f._4 FROM fact f
+            |JOIN dim d
+            |ON (f._3 = d._3)
+            |WHERE d._5 > 80
+          """.stripMargin)
+        checkAnswer(dfStr, Row(9, 10, 11, 12) :: Nil)
+
+        // mult results
+        val dfMultStrExplain = sql(
+          """
+            |Explain
+            |SELECT f._1, f._2, f._3, f._4 FROM fact f
+            |JOIN dim d
+            |ON (f._3 = d._3)
+            |WHERE d._5 > 70
+          """.stripMargin)
+        checkKeywordsExist(dfMultStrExplain, "dynamicpruningexpression", "dynamicpruning")
+
+        val dfMultStr = sql(
+          """
+            |SELECT f._1, f._2, f._3, f._4 FROM fact f
+            |JOIN dim d
+            |ON (f._3 = d._3)
+            |WHERE d._5 > 70
+          """.stripMargin)
+        checkAnswer(dfMultStr, Seq(Row(8, 9, 10, 11), Row(9, 10, 11, 12)))
+      }
+    }
+  }
+
   test("nested data - struct with array field") {
     val data = (1 to 10).map(i => Tuple1((i, Seq(s"val_$i"))))
     withOrcTable(data, "t") {
