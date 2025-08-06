@@ -114,7 +114,8 @@ case class OrcScan(
   override def getMetaData(): Map[String, String] = {
     super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters)) ++
       Map("PushedAggregation" -> pushedAggregationsStr) ++
-      Map("PushedGroupBy" -> pushedGroupByStr)
+      Map("PushedGroupBy" -> pushedGroupByStr) ++
+      Map("dppPartitionFilters" -> seqToString(dppPartitionFilters))
   }
 
   override def filterAttributes(): Array[NamedReference] = {
