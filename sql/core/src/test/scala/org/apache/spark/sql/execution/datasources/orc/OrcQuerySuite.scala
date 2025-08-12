@@ -21,7 +21,6 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 import java.time.LocalDateTime
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
@@ -31,12 +30,11 @@ import org.apache.orc.{OrcConf, OrcFile}
 import org.apache.orc.OrcConf.COMPRESS
 import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.OrcInputFormat
-
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
-import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.execution.{ExplainMode, FileSourceScanExec}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
@@ -344,23 +342,16 @@ abstract class OrcQueryTest extends OrcTest {
 
     withOrcTable(fact, "fact", true, Seq.apply("_1", "_2", "_3")) {
       withOrcTable(dim, "dim") {
-        val dfExplain = sql(
-          """
-            |Explain
-            |SELECT f._1, f._2, f._3, f._4 FROM fact f
-            |JOIN dim d
-            |ON (f._2 = d._2)
-            |WHERE d._5 > 80
-          """.stripMargin)
-        checkKeywordsExist(dfExplain, "dynamicpruningexpression", "dynamicpruning")
-
         val df = sql(
           """
             |SELECT f._1, f._2, f._3, f._4 FROM fact f
             |JOIN dim d
             |ON (f._2 = d._2)
             |WHERE d._5 > 80
-          """.stripMargin)
+            """.stripMargin)
+        val explainDF = df.queryExecution.explainString(ExplainMode
+          .fromString("formatted"))
+        assert(explainDF.contains("dynamicpruningexpression"))
         checkAnswer(df, Row(9, 10, 11, 12) :: Nil)
 
         // reuse a single Byte key
@@ -370,7 +361,10 @@ abstract class OrcQueryTest extends OrcTest {
             |JOIN dim d
             |ON (f._3 = d._3)
             |WHERE d._5 > 80
-          """.stripMargin)
+            """.stripMargin)
+        val explainDFByte = dfByte.queryExecution.explainString(ExplainMode
+          .fromString("extended"))
+        assert(explainDFByte.contains("dynamicpruningexpression"))
         checkAnswer(dfByte, Row(9, 10, 11, 12) :: Nil)
 
         // reuse a single String key
@@ -380,27 +374,23 @@ abstract class OrcQueryTest extends OrcTest {
             |JOIN dim d
             |ON (f._3 = d._3)
             |WHERE d._5 > 80
-          """.stripMargin)
+            """.stripMargin)
+        val explainDFStr = dfStr.queryExecution.explainString(ExplainMode
+          .fromString("extended"))
+        assert(explainDFStr.contains("dynamicpruningexpression"))
         checkAnswer(dfStr, Row(9, 10, 11, 12) :: Nil)
 
         // mult results
-        val dfMultStrExplain = sql(
-          """
-            |Explain
-            |SELECT f._1, f._2, f._3, f._4 FROM fact f
-            |JOIN dim d
-            |ON (f._3 = d._3)
-            |WHERE d._5 > 70
-          """.stripMargin)
-        checkKeywordsExist(dfMultStrExplain, "dynamicpruningexpression", "dynamicpruning")
-
         val dfMultStr = sql(
           """
             |SELECT f._1, f._2, f._3, f._4 FROM fact f
             |JOIN dim d
             |ON (f._3 = d._3)
             |WHERE d._5 > 70
-          """.stripMargin)
+            """.stripMargin)
+        val explainDFMultStr = dfMultStr.queryExecution.explainString(ExplainMode
+          .fromString("extended"))
+        assert(explainDFMultStr.contains("dynamicpruningexpression"))
         checkAnswer(dfMultStr, Seq(Row(8, 9, 10, 11), Row(9, 10, 11, 12)))
       }
     }

@@ -58,11 +58,7 @@ case class OrcScan(
   private var dppPartitionFilters: Seq[Expression] = Seq.empty;
 
   override def partitionFilters: Seq[Expression] = {
-    if (dppPartitionFilters.isEmpty) {
-      originPartitionFilters
-    } else {
-      originPartitionFilters ++ dppPartitionFilters
-    }
+    originPartitionFilters ++ dppPartitionFilters
   }
 
   override def readSchema(): StructType = {
